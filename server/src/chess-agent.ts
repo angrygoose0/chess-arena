@@ -1,9 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
-import OpenAI from "openai";
 import { Chess } from "chess.js";
 
-const anthropic = new Anthropic();
-const openai = new OpenAI();
+let _anthropic: Anthropic | null = null;
+
+function getAnthropicClient(): Anthropic {
+  if (!_anthropic) {
+    _anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
+  }
+  return _anthropic;
+}
 
 export type AgentType = "claude" | "gpt";
 
@@ -14,12 +21,14 @@ Your task: Choose the best move from the legal moves list.
 IMPORTANT: Respond with ONLY the move in UCI notation (e.g., "e2e4", "g1f3", "e7e8q" for promotion).
 Do not include any explanation, just the move. Nothing else.`;
 
-export async function getClaudeMove(
+async function getClaudeApiMove(
+  model: string,
   fen: string,
-  legalMoves: string[]
+  legalMoves: string[],
+  label: string
 ): Promise<string> {
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+  const message = await getAnthropicClient().messages.create({
+    model,
     max_tokens: 10,
     system: SYSTEM_PROMPT,
     messages: [
@@ -47,45 +56,23 @@ export async function getClaudeMove(
   }
   
   // Fallback: return first legal move
-  console.warn(`Claude returned invalid move "${response}", using fallback`);
+  console.warn(`${label} returned invalid move "${response}", using fallback`);
   return legalMoves[0];
+}
+
+export async function getClaudeMove(
+  fen: string,
+  legalMoves: string[]
+): Promise<string> {
+  return getClaudeApiMove("claude-sonnet-4-20250514", fen, legalMoves, "Claude");
 }
 
 export async function getGptMove(
   fen: string,
   legalMoves: string[]
 ): Promise<string> {
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o",
-    max_tokens: 10,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `Current position (FEN): ${fen}\n\nLegal moves: ${legalMoves.join(", ")}\n\nYour move:`,
-      },
-    ],
-  });
-
-  const response = (completion.choices[0].message.content || "")
-    .trim()
-    .toLowerCase();
-  
-  // Validate the move is legal
-  if (legalMoves.includes(response)) {
-    return response;
-  }
-  
-  // Try to extract a valid move from the response
-  for (const move of legalMoves) {
-    if (response.includes(move)) {
-      return move;
-    }
-  }
-  
-  // Fallback: return first legal move
-  console.warn(`GPT returned invalid move "${response}", using fallback`);
-  return legalMoves[0];
+  // Temporarily using Claude API for GPT player as well
+  return getClaudeApiMove("claude-sonnet-4-20250514", fen, legalMoves, "GPT");
 }
 
 export async function getAgentMove(

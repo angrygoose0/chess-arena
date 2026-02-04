@@ -3,10 +3,11 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
 import { config } from "dotenv";
+import { resolve } from "path";
 import { GameManager, GameState } from "./game";
 import { MarketManager } from "./market";
 
-config();
+config({ path: resolve(__dirname, "../.env") });
 
 const app = express();
 const httpServer = createServer(app);
